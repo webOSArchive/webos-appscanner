@@ -46,11 +46,12 @@ FirstAssistant.prototype.loadRemoteTxtFile = function() {
             if (xhr.status === 200) {
                 var text = xhr.responseText;
                 var appList = f.parseAppList(text);
+				Mojo.Log.info("Remote fetch succeeded, missing apps: " + appList.length);
                 f.queryInstalledApps(appList);
             } else {
 				resultsArea = document.getElementById("resultsArea");
-                resultsArea.innerHTML = '<span style="color:red">Could not load remote missing file: status ' + xhr.status + '</span>';
-				resultsArea.innerHTML += '<span><br>Trying local list...</span>';
+                resultsArea.innerHTML = '<span style="color:orange">Could not load remote missing file: status ' + xhr.status + '</span>';
+				resultsArea.innerHTML += '<span><br>Trying local list...</span><br>';
 				f.loadBundledTxtFile();
             }
         }
@@ -68,6 +69,7 @@ FirstAssistant.prototype.loadBundledTxtFile = function() {
             if (xhr.status === 200) {
                 var text = xhr.responseText;
                 var appList = f.parseAppList(text);
+				Mojo.Log.info("Local fetch succeeded, missing apps: " + appList.length);
                 f.queryInstalledApps(appList);
             } else {
 				resultsArea = document.getElementById("resultsArea");
@@ -78,65 +80,52 @@ FirstAssistant.prototype.loadBundledTxtFile = function() {
     xhr.send(null);
 };
 
-FirstAssistant.prototype.parseAppList = function(text) {
-    var entries = text.split(/[\n\r,;]+/);
-    var appList = [];
-	Mojo.Log.info("Got a list with " + entries.length + " apps!");
-    for (var i = 0; i < entries.length; i++) {
-        var item = entries[i].trim();
-		item = item.split("_");
-		item = item[0];
-        if (item !== '') {
-			Mojo.Log.info("Parsed appid: " + item);
-            appList.push(item);
-        }
-    }
-    return appList;
-};
-
 FirstAssistant.prototype.queryInstalledApps = function(appList) {
     var f = this;
-	resultsArea = document.getElementById("resultsArea");
+	Mojo.Log.info("querying installed apps");
     this.controller.serviceRequest('palm://com.palm.applicationManager', {
         method: 'listApps',
         parameters: {},
         onSuccess: function(response) {
+			Mojo.Log.info("Got a response from the application manager");
             var installed = [];
+			var installedVersions = [];
             if (response.apps) {
-                for (var i = 0; i < response.apps.length; i++) {
+				Mojo.Log.info("Examining " + response.apps.length + " installed apps");
+				for (var i = 0; i < response.apps.length; i++) {
                     installed.push(response.apps[i].id);
+					installedVersions.push(response.apps[i].version);
+					Mojo.Log.info("Found installed app: " + response.apps[i].id + " version " + response.apps[i].version);
                 }
             }
             var found = [];
             for (var j = 0; j < appList.length; j++) {
-                if (installed.indexOf(appList[j]) !== -1) {
-                    found.push(appList[j]);
+				//Mojo.Log.info("Checking app: " + JSON.stringify(appList[j]));
+				var iIndex = installed.indexOf(appList[j].appId);
+
+                if (iIndex !== -1) {
+					Mojo.Log.warn("Found potential match, need to check for version " + installedVersions[iIndex] + " of " + installed[iIndex]);
+					var foundApp = {
+						"appId": installed[iIndex],
+						"version": installedVersions[iIndex]
+					}
+                    found.push(foundApp);
                 }
             }
             
 			if (found.length === 0) {
-                resultsArea.innerHTML = 'No listed apps are installed.';
+				Mojo.Log.info("No matches from missing list!");
+                resultsArea.innerHTML += 'No missing apps are installed on this device.<br><br>';
                 return;
             }
 
             // Retrieve version info for each found app
-            var resultsHtml = 'Found installed apps:<br>';
-            var pending = found.length;
+			resultsArea = document.getElementById("resultsArea");
+            resultsArea.innerHTML += 'Checking version of potential matches...<br>';
 
-            found.forEach(function(appId) {
-                f.getAppVersion(appId, function(err, version) {
-                    if (!err) {
-                        resultsHtml += appId + ' (version: ' + version + ')<br>';
-                    } else {
-                        resultsHtml += appId + ' (version info not available)<br>';
-                    }
-                    pending--;
-                    if (pending === 0) {
-                        resultsArea.innerHTML = resultsHtml;
-                    }
-                });
-            });
-
+			for (var k = 0; k<found.length; k++) {
+				f.getAppVersion(found[k], appList);		
+			}
         },
         onFailure: function(e) {
 			Mojo.Log.error("could not list installed apps");
@@ -152,9 +141,7 @@ FirstAssistant.prototype.parseAppList = function(text) {
         var line = lines[i].trim();
         if (line === '') continue;
 
-        // Extract appId and requiredVersion from the filename pattern
-        // Example: com.mobiledreams.onceochosetenta_1.0.4all.ipk
-        var match = line.match(/^(.+?)([0-9.]+)_all.ipk$/);
+        var match = line.match(/^([^_]+)_([^_]+)_/);
         if (match) {
             appList.push({
                 appId: match[1],
@@ -163,4 +150,30 @@ FirstAssistant.prototype.parseAppList = function(text) {
         }
     }
     return appList;
+};
+
+FirstAssistant.prototype.getAppVersion=function(foundApp, appList) {
+	Mojo.Log.info("Checking version of: " + JSON.stringify(foundApp) + " against " + appList.length + " apps...");
+	var found = 0;
+	for (var i=0;i<appList.length;i++) {
+		//Mojo.Log.info(appList[i].appId + " ?= " + foundApp.appId);
+		if (appList[i].appId == foundApp.appId) {
+			resultsArea = document.getElementById("resultsArea");
+			Mojo.Log.info("Found app in missing list: " + JSON.stringify(appList[i]));
+			Mojo.Log.info("Comparing " + JSON.stringify(appList[i]) + " to " + JSON.stringify(foundApp));
+			if (appList[i].requiredVersion == foundApp.version) {
+				found = 2;
+				resultsArea.innerHTML += '<span style="color:green">Found an exact match: ' + foundApp.appId + ' version ' + foundApp.version + '</span>';
+			} else {
+				found = 1;
+				resultsArea.innerHTML += '<span style="color:blue">Found a potential match: ' + foundApp.appId + '. Wanted version ' + appList[i].requiredVersion + ', found version: ' + foundApp.version + '</span>';
+			}
+		}
+	}
+	if (found == 1) {
+		resultsArea.innerHTML += '<br><br>Please email webosarchive@gmail.com and let us know you might have this missing app!</p>';
+	}
+	if (found == 2) {
+		resultsArea.innerHTML += '<br><br>Please email webosarchive@gmail.com and let us know you definitely have this missing app!</p>';
+	}
 };
