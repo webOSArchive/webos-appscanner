@@ -1,0 +1,10 @@
+{
+	"id": "com.palm.webos.appscanner",
+	"version": "1.0.0",
+	"vendor": "webOS Archive",
+	"type": "web",
+	"main": "index.html",
+	"title": "webOS App Scanner",
+	"icon": "icon.png",
+	"uiRevision": "2"
+}
