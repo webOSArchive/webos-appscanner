@@ -40,7 +40,7 @@ FirstAssistant.prototype.loadRemoteTxtFile = function() {
     var f = this;
     // Using XMLHttpRequest instead of fetch for wider compatibility
     var xhr = new XMLHttpRequest();
-    xhr.open('GET', 'https://appcatalog.webosarchive.org/wanted.txt', true);
+    xhr.open('GET', 'http://appcatalog.webosarchive.org/wanted.txt', true);
     xhr.onreadystatechange = function() {
         if (xhr.readyState === 4) {
             if (xhr.status === 200) {
@@ -63,7 +63,7 @@ FirstAssistant.prototype.loadBundledTxtFile = function() {
     var f = this;
     // Using XMLHttpRequest instead of fetch for wider compatibility
     var xhr = new XMLHttpRequest();
-    xhr.open('GET', 'data/applist.txt', true);
+    xhr.open('GET', 'data/wanted.txt', true);
     xhr.onreadystatechange = function() {
         if (xhr.readyState === 4) {
             if (xhr.status === 200) {
